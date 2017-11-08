@@ -47,8 +47,8 @@ void import_entry(ExifEntry* entry, void* user_data) {
 
   ExifIfd ifd = exif_entry_get_ifd(entry);
 
+  value->rawValue = entry;
   strncpy(value->name, exif_tag_get_title_in_ifd(entry->tag, ifd), EXIF_VALUE_MAXLEN);
-
   strncpy(value->value, exif_entry_get_value(entry, exif_text, EXIF_VALUE_MAXLEN), EXIF_VALUE_MAXLEN);
 
   push_exif_value(user_data, value);
@@ -69,6 +69,7 @@ exif_value_t* new_exif_value() {
   n->name = (char *)malloc(sizeof(char)*EXIF_VALUE_MAXLEN);
   n->value = (char *)malloc(sizeof(char)*EXIF_VALUE_MAXLEN);
 
+  n->rawValue = '\0';
   n->name[0]  = '\0';
   n->value[0] = '\0';
   n->prev     = 0;

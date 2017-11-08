@@ -48,16 +48,79 @@ var (
 	ErrFoundExifInData = errors.New(`Found EXIF header. OK to call Parse.`)
 )
 
+const TagOrientation = 274
+
+const OrientationUnknown = 0
+const OrientationTopLeft = 1
+const OrientationTopRight = 2
+const OrientationBottomRight = 3
+const OrientationBottomLeft = 4
+const OrientationLeftTop = 5
+const OrientationRightTop = 6
+const OrientationRightBottom = 7
+const OrientationLeftBottom = 8
+
+const exifFormatShort = 3
+const exifFormatLong = 4
+
+type Tag interface {
+	Tag() int
+	TextLabel() string
+	TextValue() string
+	setTag(int)
+	setTextLabel(string)
+	setTextValue(string)
+}
+
+type IntegerTag interface {
+	Tag
+	IntValue() int
+}
+
+type basicTag struct {
+	tag   int
+	label string
+	value string
+}
+
+type integerTag struct {
+	basicTag
+	intValue int
+}
+
+func (this *basicTag) Tag() int {
+	return this.tag
+}
+func (this *basicTag) TextLabel() string {
+	return this.label
+}
+func (this *basicTag) TextValue() string {
+	return this.value
+}
+
+func (this *basicTag) setTag(val int) {
+	this.tag = val
+}
+func (this *basicTag) setTextLabel(val string) {
+	this.label = val
+}
+func (this *basicTag) setTextValue(val string) {
+	this.value = val
+}
+func (this *integerTag) IntValue() int {
+	return this.intValue
+}
+
 // Data stores the EXIF tags of a file.
 type Data struct {
 	exifLoader *C.ExifLoader
-	Tags       map[string]string
+	Tags       map[int]Tag
 }
 
 // New creates and returns a new exif.Data object.
 func New() *Data {
 	data := &Data{
-		Tags: make(map[string]string),
+		Tags: make(map[int]Tag),
 	}
 	return data
 }
@@ -96,7 +159,24 @@ func (d *Data) parseExifData(exifData *C.ExifData) error {
 		if value == nil {
 			break
 		} else {
-			d.Tags[strings.Trim(C.GoString((*value).name), " ")] = strings.Trim(C.GoString((*value).value), " ")
+			tagId := int(C.int((*value).rawValue.tag))
+			tagFmt := C.int((*value).rawValue.format)
+			var thisTag Tag
+			if tagFmt == exifFormatShort {
+				intTag := &integerTag{}
+				thisTag = intTag
+				intTag.intValue = int(C.exif_get_short((*value).rawValue.data, C.exif_data_get_byte_order((*value).rawValue.parent.parent)))
+			} else if tagFmt == exifFormatLong {
+				intTag := &integerTag{}
+				thisTag = intTag
+				intTag.intValue = int(C.exif_get_long((*value).rawValue.data, C.exif_data_get_byte_order((*value).rawValue.parent.parent)))
+			} else {
+				thisTag = &basicTag{}
+			}
+			thisTag.setTag(tagId)
+			thisTag.setTextLabel(strings.Trim(C.GoString((*value).name), " "))
+			thisTag.setTextValue(strings.Trim(C.GoString((*value).value), " "))
+			d.Tags[thisTag.Tag()] = thisTag
 		}
 		C.free_exif_value(value)
 	}
