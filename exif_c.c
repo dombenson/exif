@@ -80,7 +80,6 @@ exif_value_t* new_exif_value() {
 ExifRational
 exif_get_rational_offset (const unsigned char *buf, ExifByteOrder order, int offset)
 {
-	buf=buf+8*offset;
     return exif_get_rational(buf+8*offset, order);
 }
 
