@@ -50,6 +50,20 @@ var (
 
 const TagOrientation = 274
 
+const TagLatitudeRef = 1
+const TagLatitude = 2
+const TagLongitudeRef = 3
+const TagLongitude = 4
+const TagAltitudeRef = 5
+const TagAltitude = 6
+
+const LatitudeRefNorth = "N"
+const LatitudeRefSouth = "S"
+const LongitudeRefEast = "E"
+const LongitudeRefWest = "W"
+const AltitudeRefAbove = 0
+const AltitudeRefBelow = 1
+
 const OrientationUnknown = 0
 const OrientationTopLeft = 1
 const OrientationTopRight = 2
@@ -60,8 +74,11 @@ const OrientationRightTop = 6
 const OrientationRightBottom = 7
 const OrientationLeftBottom = 8
 
+const exifFormatByte = 1
+const exifFormatString = 2
 const exifFormatShort = 3
 const exifFormatLong = 4
+const exifFormatFloat = 5
 
 type Tag interface {
 	Tag() int
@@ -77,6 +94,13 @@ type IntegerTag interface {
 	IntValue() int
 }
 
+type FloatTag interface {
+	Tag
+	FloatValue() float64
+	Numerator() int
+	Denominator() int
+}
+
 type basicTag struct {
 	tag   int
 	label string
@@ -86,6 +110,12 @@ type basicTag struct {
 type integerTag struct {
 	basicTag
 	intValue int
+}
+
+type floatTag struct {
+	basicTag
+	numerator   int
+	denominator int
 }
 
 func (this *basicTag) Tag() int {
@@ -109,6 +139,16 @@ func (this *basicTag) setTextValue(val string) {
 }
 func (this *integerTag) IntValue() int {
 	return this.intValue
+}
+func (this *floatTag) Numerator() int {
+	return this.numerator
+}
+func (this *floatTag) Denominator() int {
+	return this.denominator
+}
+
+func (this *floatTag) FloatValue() float64 {
+	return (float64(this.numerator) / float64(this.denominator))
 }
 
 // Data stores the EXIF tags of a file.
@@ -154,22 +194,47 @@ func (d *Data) parseExifData(exifData *C.ExifData) error {
 	values := C.exif_dump(exifData)
 	defer C.free(unsafe.Pointer(values))
 
+	var byteOrder C.ExifByteOrder
+	var haveByteOrder bool
+
 	for {
 		value := C.pop_exif_value(values)
 		if value == nil {
 			break
 		} else {
+			if !haveByteOrder {
+				byteOrder = C.exif_data_get_byte_order((*value).rawValue.parent.parent)
+				haveByteOrder = true
+			}
 			tagId := int(C.int((*value).rawValue.tag))
 			tagFmt := C.int((*value).rawValue.format)
 			var thisTag Tag
-			if tagFmt == exifFormatShort {
+			if tagFmt == exifFormatByte {
 				intTag := &integerTag{}
 				thisTag = intTag
-				intTag.intValue = int(C.exif_get_short((*value).rawValue.data, C.exif_data_get_byte_order((*value).rawValue.parent.parent)))
+				intTag.intValue = int((*(*value).rawValue.data))
+			} else if tagFmt == exifFormatShort {
+				intTag := &integerTag{}
+				thisTag = intTag
+				intTag.intValue = int(C.exif_get_short((*value).rawValue.data, byteOrder))
 			} else if tagFmt == exifFormatLong {
 				intTag := &integerTag{}
 				thisTag = intTag
-				intTag.intValue = int(C.exif_get_long((*value).rawValue.data, C.exif_data_get_byte_order((*value).rawValue.parent.parent)))
+				intTag.intValue = int(C.exif_get_long((*value).rawValue.data, byteOrder))
+			} else if tagFmt == exifFormatFloat {
+				intTag := &floatTag{}
+				thisTag = intTag
+				rational := C.exif_get_rational((*value).rawValue.data, byteOrder)
+				intTag.numerator = int(rational.numerator)
+				intTag.denominator = int(rational.denominator)
+				numComponents := int((*value).rawValue.components)
+				if numComponents > 1 {
+					for i := 1; i < numComponents; i++ {
+						rational = C.exif_get_rational_offset((*value).rawValue.data, byteOrder, C.int(i))
+						intTag.numerator = 60*intTag.numerator*int(rational.denominator) + int(rational.numerator)*intTag.denominator
+						intTag.denominator = intTag.denominator * int(rational.denominator) * 60
+					}
+				}
 			} else {
 				thisTag = &basicTag{}
 			}

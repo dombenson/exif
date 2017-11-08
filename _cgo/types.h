@@ -31,3 +31,5 @@ typedef struct exif_value {
 typedef struct exif_stack {
 	struct exif_value* head;
 } exif_stack_t;
+
+ExifRational exif_get_rational_offset (const unsigned char *buf, ExifByteOrder order, int offset);

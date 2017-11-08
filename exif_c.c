@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include <libexif/exif-data.h>
+#include <libexif/exif-utils.h>
 
 #include "_cgo/types.h"
 
@@ -75,6 +76,14 @@ exif_value_t* new_exif_value() {
   n->prev     = 0;
   return n;
 }
+
+ExifRational
+exif_get_rational_offset (const unsigned char *buf, ExifByteOrder order, int offset)
+{
+	buf=buf+8*offset;
+    return exif_get_rational(buf+8*offset, order);
+}
+
 
 void push_exif_value(exif_stack_t* stack, exif_value_t* n) {
   n->prev = stack->head;
